@@ -5,7 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Entre a Fortuna e o Poder</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/epubjs/dist/epub.min.js"></script>  <style>
+  <script src="https://cdn.jsdelivr.net/npm/epubjs/dist/epub.min.js"></script>
+  <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body {
       height: 100%;
@@ -15,17 +16,15 @@
       color: #333;
     }
 
-    /* Área de leitura ocupa toda a tela, menos a barra de botões */
     #viewer {
       position: absolute;
       top: 0;
       left: 0;
       right: 0;
-      bottom: 64px; /* altura da barra de botões */
+      bottom: 64px;
       background: #fdfcf7;
     }
 
-    /* Barra de botões fixa na parte inferior */
     #controls {
       position: absolute;
       bottom: 0;
@@ -35,10 +34,11 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 0 16px;
+      padding: 0 10px;
       background: #1a1a1a;
       border-top: 1px solid #333;
       z-index: 10;
+      gap: 6px;
     }
 
     button {
@@ -46,27 +46,27 @@
       color: #f0f0f0;
       border: none;
       border-radius: 8px;
-      padding: 10px 18px;
-      font-size: 15px;
+      padding: 10px 12px;
+      font-size: 14px;
       font-weight: 600;
       cursor: pointer;
       transition: background 0.15s;
       -webkit-tap-highlight-color: transparent;
       user-select: none;
+      white-space: nowrap;
     }
 
     button:active { background: #555; }
     button:disabled { opacity: 0.35; cursor: not-allowed; }
 
-    /* Indicador de progresso no centro */
     #progresso {
       color: #aaa;
-      font-size: 13px;
+      font-size: 12px;
       flex: 1;
       text-align: center;
+      min-width: 40px;
     }
 
-    /* Tela de carregamento */
     #loading {
       position: absolute;
       inset: 0;
@@ -77,9 +77,38 @@
       color: #f0f0f0;
       font-size: 16px;
       z-index: 20;
+      text-align: center;
+      padding: 20px;
     }
 
     #loading.hidden { display: none; }
+
+    /* Notificação "Posição salva" */
+    #toast {
+      position: absolute;
+      top: 16px;
+      left: 50%;
+      transform: translateX(-50%) translateY(-120%);
+      background: rgba(40, 40, 40, 0.95);
+      color: #f0f0f0;
+      padding: 10px 20px;
+      border-radius: 20px;
+      font-size: 13px;
+      z-index: 30;
+      transition: transform 0.3s ease;
+      pointer-events: none;
+      white-space: nowrap;
+    }
+
+    #toast.visible {
+      transform: translateX(-50%) translateY(0);
+    }
+
+    /* Botão de marcador com destaque quando ativo */
+    #btnMarcador.ativo {
+      background: #c9a227;
+      color: #1a1a1a;
+    }
   </style>
 </head>
 <body>
@@ -87,55 +116,91 @@
   <div id="viewer"></div>
 
   <div id="controls">
-    <button id="btnAnterior" disabled>‹ Anterior</button>
-    <div id="progresso">Carregando…</div>
-    <button id="btnProxima">Próxima ›</button>
+    <button id="btnInicio" title="Voltar ao início">⏮</button>
+    <button id="btnAnterior" disabled>‹</button>
+    <div id="progresso">—</div>
+    <button id="btnMarcador" title="Salvar marcador">🔖</button>
+    <button id="btnProxima">›</button>
   </div>
 
+  <div id="toast"></div>
   <div id="loading">Carregando o livro…</div>
 
   <script>
-    // === CONFIGURAÇÃO ===
-    // Ajuste aqui o caminho/nome do seu EPUB
+    // ============================================================
+    // CONFIGURAÇÃO
+    // ============================================================
     const LIVRO_EPUB = "livro.epub";
 
-    // === INICIALIZAÇÃO ===
-    const viewerEl = document.getElementById("viewer");
-    const btnAnterior = document.getElementById("btnAnterior");
-    const btnProxima = document.getElementById("btnProxima");
-    const progressoEl = document.getElementById("progresso");
-    const loadingEl = document.getElementById("loading");
+    // Chaves usadas no localStorage
+    const CHAVE_POSICAO = "livro_posicao_atual";   // posição salva automaticamente
+    const CHAVE_MARCADOR = "livro_marcador_manual"; // marcador explícito do usuário
 
+    // ============================================================
+    // ELEMENTOS
+    // ============================================================
+    const viewerEl     = document.getElementById("viewer");
+    const btnInicio    = document.getElementById("btnInicio");
+    const btnAnterior  = document.getElementById("btnAnterior");
+    const btnProxima   = document.getElementById("btnProxima");
+    const btnMarcador  = document.getElementById("btnMarcador");
+    const progressoEl  = document.getElementById("progresso");
+    const loadingEl    = document.getElementById("loading");
+    const toastEl      = document.getElementById("toast");
+
+    // ============================================================
+    // INICIALIZAÇÃO DO EPUB
+    // ============================================================
     const book = ePub(LIVRO_EPUB);
     const rendition = book.renderTo("viewer", {
       width: "100%",
       height: "100%",
-      flow: "paginated",       // força paginação em colunas
-      spread: "none",          // uma página por vez (ideal para celular)
+      flow: "paginated",
+      spread: "none",
       manager: "default"
     });
 
-    // Mostra a tela de carregamento até o livro abrir
-    rendition.display().then(() => {
-      loadingEl.classList.add("hidden");
-      atualizarBotoes();
-    }).catch(err => {
-      loadingEl.textContent = "Erro ao carregar o livro: " + err.message;
-      console.error(err);
-    });
+    // Tenta recuperar posição salva anteriormente.
+    // Preferência: marcador manual > posição automática > início.
+    let cfiInicial = null;
+    try {
+      cfiInicial =
+        localStorage.getItem(CHAVE_MARCADOR) ||
+        localStorage.getItem(CHAVE_POSICAO);
+    } catch (e) {
+      console.warn("localStorage indisponível:", e);
+    }
 
-    // === NAVEGAÇÃO ===
-    function irParaProxima() {
-      rendition.next();
-    }
-    function irParaAnterior() {
-      rendition.prev();
-    }
+    rendition.display(cfiInicial || undefined)
+      .then(() => {
+        loadingEl.classList.add("hidden");
+        if (cfiInicial) {
+          mostrarToast("Retomando de onde você parou");
+        }
+        atualizarEstadoMarcador();
+      })
+      .catch(err => {
+        // Se o CFI salvo estiver corrompido, tenta abrir do início
+        console.warn("Falha ao restaurar posição, abrindo do início:", err);
+        if (cfiInicial) {
+          localStorage.removeItem(CHAVE_POSICAO);
+          localStorage.removeItem(CHAVE_MARCADOR);
+          rendition.display();
+        } else {
+          loadingEl.textContent = "Erro ao carregar o livro: " + err.message;
+        }
+      });
+
+    // ============================================================
+    // NAVEGAÇÃO
+    // ============================================================
+    function irParaProxima() { rendition.next(); }
+    function irParaAnterior() { rendition.prev(); }
 
     btnProxima.addEventListener("click", irParaProxima);
     btnAnterior.addEventListener("click", irParaAnterior);
 
-    // Também permite passar página com swipe (arrastar o dedo)
+    // Swipe no celular
     let touchStartX = 0;
     viewerEl.addEventListener("touchstart", e => {
       touchStartX = e.changedTouches[0].screenX;
@@ -149,35 +214,102 @@
       }
     }, { passive: true });
 
-    // === ATUALIZA ESTADO DOS BOTÕES E PROGRESSO ===
-    function atualizarBotoes() {
-      // epub.js não expõe diretamente "tem próxima?" de forma simples,
-      // então calculamos a partir da localização atual vs total.
-      const loc = rendition.currentLocation();
-      if (loc && loc.start) {
-        const porcentagem = Math.round(loc.start.percentage * 100);
-        progressoEl.textContent = porcentagem + "%";
-      }
-    }
-
-    // Atualiza sempre que a página mudar (seja por botão ou swipe)
-    rendition.on("relocated", (location) => {
-      const pct = location.start.percentage;
-      progressoEl.textContent = Math.round(pct * 100) + "%";
-
-      // Desabilita botão de voltar se estiver no início
-      btnAnterior.disabled = (location.start.index === 0);
-      // Desabilita próximo se estiver no fim
-      btnProxima.disabled = (pct >= 0.999);
-    });
-
-    // === NAVEGAÇÃO POR TECLADO (útil para testar no desktop) ===
+    // Teclado (útil para testar no desktop)
     document.addEventListener("keydown", e => {
       if (e.key === "ArrowRight") irParaProxima();
       if (e.key === "ArrowLeft") irParaAnterior();
     });
 
-    // Ao girar o celular / redimensionar, epub.js recalcula a paginação
+    // ============================================================
+    // SALVAMENTO AUTOMÁTICO DE POSIÇÃO
+    // Sempre que a página muda, salva o CFI no localStorage.
+    // ============================================================
+    let debounceTimer = null;
+
+    rendition.on("relocated", (location) => {
+      const pct = location.start.percentage;
+      progressoEl.textContent = Math.round(pct * 100) + "%";
+
+      btnAnterior.disabled = (location.start.index === 0);
+      btnProxima.disabled = (pct >= 0.999);
+
+      // Salva a posição (com debounce para não escrever a cada micro-movimento)
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        try {
+          localStorage.setItem(CHAVE_POSICAO, location.start.cfi);
+        } catch (e) { /* silencioso */ }
+      }, 300);
+    });
+
+    // Ao fechar a aba, garante o último salvamento
+    window.addEventListener("beforeunload", () => {
+      const loc = rendition.currentLocation();
+      if (loc && loc.start && loc.start.cfi) {
+        try {
+          localStorage.setItem(CHAVE_POSICAO, loc.start.cfi);
+        } catch (e) {}
+      }
+    });
+
+    // ============================================================
+    // BOTÃO "MARCADOR" MANUAL
+    // Salva um ponto explícito, separado da posição automática.
+    // ============================================================
+    btnMarcador.addEventListener("click", () => {
+      const loc = rendition.currentLocation();
+      if (!loc || !loc.start || !loc.start.cfi) return;
+
+      try {
+        localStorage.setItem(CHAVE_MARCADOR, loc.start.cfi);
+        mostrarToast("🔖 Marcador salvo nesta página");
+        atualizarEstadoMarcador();
+      } catch (e) {
+        mostrarToast("Não foi possível salvar o marcador");
+      }
+    });
+
+    function atualizarEstadoMarcador() {
+      // Destaca o botão se o marcador salvo coincide com a posição atual
+      let marcador = null;
+      try { marcador = localStorage.getItem(CHAVE_MARCADOR); } catch (e) {}
+      const loc = rendition.currentLocation();
+      const cfiAtual = loc && loc.start ? loc.start.cfi : null;
+      btnMarcador.classList.toggle("ativo", !!(marcador && cfiAtual && marcador === cfiAtual));
+    }
+
+    rendition.on("relocated", atualizarEstadoMarcador);
+
+    // ============================================================
+    // BOTÃO "INÍCIO" (recomeçar do zero)
+    // ============================================================
+    btnInicio.addEventListener("click", () => {
+      if (!confirm("Voltar ao início do livro? Isso apagará a posição e o marcador salvos.")) return;
+      try {
+        localStorage.removeItem(CHAVE_POSICAO);
+        localStorage.removeItem(CHAVE_MARCADOR);
+      } catch (e) {}
+      rendition.display();
+      mostrarToast("Voltando ao início");
+      atualizarEstadoMarcador();
+    });
+
+    // ============================================================
+    // TOAST (notificação temporária)
+    // ============================================================
+    let toastTimer = null;
+    function mostrarToast(msg) {
+      toastEl.textContent = msg;
+      toastEl.classList.add("visible");
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => {
+        toastEl.classList.remove("visible");
+      }, 2200);
+    }
+
+    // ============================================================
+    // RESPONSIVIDADE
+    // ============================================================
     window.addEventListener("resize", () => {
       rendition.resize();
     });
