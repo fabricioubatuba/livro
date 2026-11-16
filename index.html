@@ -7,13 +7,47 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/epubjs/dist/epub.min.js"></script>
   <style>
+    :root {
+      --bg-app: #1a1a1a;
+      --bg-bar: #1e1e1e;
+      --bg-btn: #2e2e2e;
+      --bg-btn-hover: #3d3d3d;
+      --bg-btn-active: #4a4a4a;
+      --txt-primary: #f0f0f0;
+      --txt-secondary: #9a9a9a;
+      --border: #333;
+      --accent: #c9a227;
+      --accent-txt: #1a1a1a;
+      --viewer-bg: #fdfcf7;
+      --shadow: 0 4px 14px rgba(0,0,0,0.35);
+      --radius: 14px;
+      --btn-size: 46px;
+    }
+
+    body.modo-claro {
+      --bg-app: #f5f3ec;
+      --bg-bar: #ffffff;
+      --bg-btn: #ece9e0;
+      --bg-btn-hover: #ded9cc;
+      --bg-btn-active: #d0cab9;
+      --txt-primary: #2b2b2b;
+      --txt-secondary: #7a7a7a;
+      --border: #d8d3c7;
+      --accent: #b8912b;
+      --accent-txt: #ffffff;
+      --viewer-bg: #fdfcf7;
+      --shadow: 0 4px 14px rgba(0,0,0,0.12);
+    }
+
     * { margin: 0; padding: 0; box-sizing: border-box; }
+
     html, body {
       height: 100%;
       overflow: hidden;
-      background: #1a1a1a;
+      background: var(--bg-app);
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      color: #333;
+      color: var(--txt-primary);
+      transition: background 0.3s ease, color 0.3s ease;
     }
 
     #viewer {
@@ -21,8 +55,9 @@
       top: 0;
       left: 0;
       right: 0;
-      bottom: 64px;
-      background: #fdfcf7;
+      bottom: 72px;
+      background: var(--viewer-bg);
+      transition: background 0.3s ease;
     }
 
     #controls {
@@ -30,41 +65,62 @@
       bottom: 0;
       left: 0;
       right: 0;
-      height: 64px;
+      height: 72px;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 0 10px;
-      background: #1a1a1a;
-      border-top: 1px solid #333;
+      padding: 0 14px;
+      background: var(--bg-bar);
+      border-top: 1px solid var(--border);
       z-index: 10;
-      gap: 6px;
+      gap: 8px;
+      transition: background 0.3s ease, border-color 0.3s ease;
+      box-shadow: 0 -2px 10px rgba(0,0,0,0.15);
     }
 
     button {
-      background: #3a3a3a;
-      color: #f0f0f0;
-      border: none;
-      border-radius: 8px;
-      padding: 10px 12px;
-      font-size: 14px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg-btn);
+      color: var(--txt-primary);
+      border: 1px solid transparent;
+      border-radius: var(--radius);
+      width: var(--btn-size);
+      height: var(--btn-size);
+      font-size: 18px;
       font-weight: 600;
       cursor: pointer;
-      transition: background 0.15s;
+      transition: background 0.15s, transform 0.1s, border-color 0.15s;
       -webkit-tap-highlight-color: transparent;
       user-select: none;
       white-space: nowrap;
+      box-shadow: var(--shadow);
     }
 
-    button:active { background: #555; }
-    button:disabled { opacity: 0.35; cursor: not-allowed; }
+    button svg {
+      width: 22px;
+      height: 22px;
+      display: block;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    button:hover:not(:disabled) { background: var(--bg-btn-hover); }
+    button:active:not(:disabled) { background: var(--bg-btn-active); transform: scale(0.94); }
+    button:disabled { opacity: 0.3; cursor: not-allowed; box-shadow: none; }
 
     #progresso {
-      color: #aaa;
-      font-size: 12px;
+      color: var(--txt-secondary);
+      font-size: 13px;
+      font-weight: 600;
       flex: 1;
       text-align: center;
       min-width: 40px;
+      letter-spacing: 0.5px;
     }
 
     #loading {
@@ -73,12 +129,13 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      background: #1a1a1a;
-      color: #f0f0f0;
+      background: var(--bg-app);
+      color: var(--txt-primary);
       font-size: 16px;
       z-index: 20;
       text-align: center;
       padding: 20px;
+      transition: background 0.3s ease;
     }
 
     #loading.hidden { display: none; }
@@ -88,16 +145,18 @@
       position: absolute;
       top: 16px;
       left: 50%;
-      transform: translateX(-50%) translateY(-120%);
-      background: rgba(40, 40, 40, 0.95);
+      transform: translateX(-50%) translateY(-140%);
+      background: rgba(40, 40, 40, 0.96);
       color: #f0f0f0;
-      padding: 10px 20px;
-      border-radius: 20px;
+      padding: 11px 22px;
+      border-radius: 24px;
       font-size: 13px;
+      font-weight: 500;
       z-index: 30;
-      transition: transform 0.3s ease;
+      transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1);
       pointer-events: none;
       white-space: nowrap;
+      box-shadow: 0 6px 20px rgba(0,0,0,0.4);
     }
 
     #toast.visible {
@@ -106,9 +165,23 @@
 
     /* Botão de marcador com destaque quando ativo */
     #btnMarcador.ativo {
-      background: #c9a227;
-      color: #1a1a1a;
+      background: var(--accent);
+      color: var(--accent-txt);
+      border-color: var(--accent);
     }
+
+    #btnMarcador.ativo svg {
+      fill: currentColor;
+      stroke: currentColor;
+    }
+
+    /* Botão de tema */
+    #btnTema {
+      background: transparent;
+      border-color: var(--border);
+    }
+
+    #btnTema:hover:not(:disabled) { background: var(--bg-btn-hover); }
   </style>
 </head>
 <body>
@@ -116,11 +189,22 @@
   <div id="viewer"></div>
 
   <div id="controls">
-    <button id="btnInicio" title="Voltar ao início">⏮</button>
-    <button id="btnAnterior" disabled>‹</button>
+    <button id="btnInicio" title="Voltar ao início" aria-label="Voltar ao início">
+      <svg viewBox="0 0 24 24"><path d="M19 20L9 12l10-8v16z"/><path d="M5 19V5"/></svg>
+    </button>
+    <button id="btnAnterior" disabled title="Página anterior" aria-label="Página anterior">
+      <svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>
+    </button>
     <div id="progresso">—</div>
-    <button id="btnMarcador" title="Salvar marcador">🔖</button>
-    <button id="btnProxima">›</button>
+    <button id="btnMarcador" title="Salvar marcador" aria-label="Salvar marcador">
+      <svg viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+    </button>
+    <button id="btnTema" title="Alternar tema" aria-label="Alternar tema">
+      <svg id="iconeTema" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+    </button>
+    <button id="btnProxima" title="Próxima página" aria-label="Próxima página">
+      <svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
+    </button>
   </div>
 
   <div id="toast"></div>
@@ -135,6 +219,7 @@
     // Chaves usadas no localStorage
     const CHAVE_POSICAO = "livro_posicao_atual";   // posição salva automaticamente
     const CHAVE_MARCADOR = "livro_marcador_manual"; // marcador explícito do usuário
+    const CHAVE_TEMA = "livro_tema";                // "claro" ou "escuro"
 
     // ============================================================
     // ELEMENTOS
@@ -144,9 +229,51 @@
     const btnAnterior  = document.getElementById("btnAnterior");
     const btnProxima   = document.getElementById("btnProxima");
     const btnMarcador  = document.getElementById("btnMarcador");
+    const btnTema      = document.getElementById("btnTema");
+    const iconeTema    = document.getElementById("iconeTema");
     const progressoEl  = document.getElementById("progresso");
     const loadingEl    = document.getElementById("loading");
     const toastEl      = document.getElementById("toast");
+
+    // ============================================================
+    // TEMA (claro / escuro)
+    // ============================================================
+    const SVG_SOL = '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>';
+    const SVG_LUA = '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>';
+
+    function aplicarTema(tema) {
+      const claro = tema === "claro";
+      document.body.classList.toggle("modo-claro", claro);
+      iconeTema.innerHTML = claro ? SVG_LUA : SVG_SOL;
+      btnTema.title = claro ? "Ativar modo escuro" : "Ativar modo claro";
+      btnTema.setAttribute("aria-label", btnTema.title);
+
+      // Sincroniza o fundo do iframe do EPUB com o tema
+      try {
+        const iframe = document.querySelector("#viewer iframe");
+        if (iframe && iframe.contentDocument) {
+          const body = iframe.contentDocument.body;
+          if (body) {
+            body.style.background = claro ? "#fdfcf7" : "#1a1a1a";
+            body.style.color = claro ? "#2b2b2b" : "#e8e8e8";
+          }
+        }
+      } catch (e) { /* cross-origin pode bloquear; silencioso */ }
+
+      try { localStorage.setItem(CHAVE_TEMA, tema); } catch (e) {}
+    }
+
+    function temaSalvo() {
+      try { return localStorage.getItem(CHAVE_TEMA); } catch (e) { return null; }
+    }
+
+    // Aplica tema inicial
+    aplicarTema(temaSalvo() || "escuro");
+
+    btnTema.addEventListener("click", () => {
+      const atual = document.body.classList.contains("modo-claro") ? "claro" : "escuro";
+      aplicarTema(atual === "claro" ? "escuro" : "claro");
+    });
 
     // ============================================================
     // INICIALIZAÇÃO DO EPUB
@@ -178,6 +305,8 @@
           mostrarToast("Retomando de onde você parou");
         }
         atualizarEstadoMarcador();
+        // Reaplica tema no iframe recém-criado
+        aplicarTema(document.body.classList.contains("modo-claro") ? "claro" : "escuro");
       })
       .catch(err => {
         // Se o CFI salvo estiver corrompido, tenta abrir do início
